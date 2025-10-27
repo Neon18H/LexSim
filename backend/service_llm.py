@@ -116,12 +116,15 @@ async def call_openrouter(system_prompt: str, user_prompt: str) -> str:
     attempts = 0
     last_exception: Exception | None = None
 
-    async with httpx.AsyncClient(base_url=str(settings.openrouter_base_url)) as client:
+    async with httpx.AsyncClient() as client:
         while attempts < 3:
             attempts += 1
             try:
                 response = await client.post(
-                    "", headers=headers, json=payload, timeout=timeout
+                    str(settings.openrouter_base_url),
+                    headers=headers,
+                    json=payload,
+                    timeout=timeout,
                 )
                 if response.status_code == 429 and attempts < 3:
                     await asyncio.sleep(2 * attempts)

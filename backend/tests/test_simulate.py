@@ -159,3 +159,135 @@ def test_simulate_returns_expected_payload():
     assert "markdown" in data and data["markdown"].startswith("# Simulación LexSim")
     assert data["json"]["meta"]["titulo"] == "Caso de prueba LexSim"
     assert data["warnings"] == []
+
+
+def test_simulate_warns_when_markdown_missing(monkeypatch):
+    sample_json = {
+        "meta": {
+            "titulo": "Caso solo estructurado",
+            "jurisdiccion": "Penal acusatorio hispano genérico",
+            "materia": "penal",
+            "nivel": "intermedio",
+            "objetivo_didactico": "evaluar advertencias",
+            "duracion_minutos": 90,
+        },
+        "personajes": [
+            {
+                "nombre": "Juez de Prueba",
+                "rol": "juez",
+                "bio": "Figura académica",
+                "objetivos": ["Mantener orden"],
+                "sesgos": ["Preferencia por protocolos"],
+            }
+        ],
+        "cronologia": [{"t": "2035-01-10 09:00", "evento": "Inicio"}],
+        "planteamiento_juridico": {
+            "tipo": "penal",
+            "cargos_o_pretensiones": ["Incumplimiento simulado"],
+            "estandar_probatorio": "Más allá de duda razonable",
+            "notas": "Sin narrativa pedagógica",
+        },
+        "pruebas": {
+            "documental": [
+                {
+                    "id": "DOC-01",
+                    "descripcion": "Informe académico",
+                    "origen": "Facultad de Derecho",
+                    "autenticidad_custodia": "Sellado didáctico",
+                    "posibles_objeciones": ["Pertinencia"],
+                }
+            ],
+            "testimonial": [
+                {
+                    "id": "TES-01",
+                    "testigo": "Persona Observadora",
+                    "alcance": "Vio eventos centrales",
+                    "riesgos_credibilidad": ["Sesgo de confirmación"],
+                    "contrapreguntas_sugeridas": ["Profundizar detalles"],
+                }
+            ],
+            "pericial": [
+                {
+                    "id": "PER-01",
+                    "area": "Tecnología",
+                    "metodo": "Análisis simulado",
+                    "limites": "Datos incompletos",
+                    "validez": "Proceso didáctico",
+                }
+            ],
+            "digital_fisica": [
+                {
+                    "id": "DIG-01",
+                    "tipo": "digital",
+                    "descripcion": "Registro de sensores",
+                    "hash": "fff111",
+                    "metadatos": {"duracion": "00:02:00"},
+                    "cadena_custodia": "Transferencia supervisada",
+                }
+            ],
+        },
+        "guion": {
+            "instrucciones_iniciales_juez": "Roles y metodología",
+            "apertura": {"parte_1": "Exposición fiscal", "parte_2": "Respuesta defensa"},
+            "interrogatorios": [
+                {
+                    "tipo": "directo",
+                    "a_quien": "Testigo TES-01",
+                    "preguntas": ["¿Qué observó?"],
+                }
+            ],
+            "objeciones_tipicas": [
+                {"objecion": "leading", "fundamento": "Pregunta orientada"}
+            ],
+            "cierre": {"parte_1": "Síntesis fiscal", "parte_2": "Síntesis defensa"},
+            "instrucciones_finales_juez": "Discusión guiada",
+        },
+        "decision": {
+            "criterios": ["Valor de las pruebas"],
+            "matriz_veredicto": [
+                {
+                    "criterio": "Cadena de custodia",
+                    "peso": 0.4,
+                    "observaciones": "Seguimiento completo",
+                }
+            ],
+            "resultados_alternativos": [
+                {"escenario": "A", "descripcion": "Escenario alternativo"}
+            ],
+        },
+        "banco_preguntas": ["¿Cuál objeción corresponde?"],
+        "rubrica": [
+            {
+                "criterio": "Dominio procesal",
+                "niveles": {
+                    "excelente": "Domina objeciones complejas",
+                    "bueno": "Identifica objeciones comunes",
+                    "basico": "Necesita guía",
+                },
+                "puntaje_max": 10,
+            }
+        ],
+        "variantes": ["Introducir evidencia digital adicional"],
+        "glosario": [
+            {"termino": "Cadena de custodia", "definicion": "Control sobre evidencia"}
+        ],
+    }
+
+    async def _json_only(system_prompt: str, user_prompt: str) -> str:
+        return f"```json\n{json.dumps(sample_json)}\n```"
+
+    monkeypatch.setattr("backend.router", "call_openrouter", _json_only)
+
+    payload: Dict[str, Any] = {
+        "contexto": "Linea 1\nLinea 2\nLinea 3",
+        "materia": "penal",
+        "nivel": "intermedio",
+        "duracion_min": 90,
+    }
+
+    response = client.post("/api/simulate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["markdown"] == ""
+    assert data["json"]["meta"]["titulo"] == "Caso solo estructurado"
+    assert any("Markdown" in warning for warning in data["warnings"])

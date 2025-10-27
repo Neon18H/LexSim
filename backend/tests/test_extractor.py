@@ -246,3 +246,31 @@ def test_extract_simulation_payload_nested_braces():
     assert "Conclusión" in markdown
     assert simulation_json is not None
     assert not any("No se detectó un bloque JSON válido" in warning for warning in warnings)
+
+
+def test_extract_simulation_payload_recovers_trailing_commas():
+    json_payload = _build_valid_json().replace(
+        '"variantes": ["Cambiar a materia civil"]',
+        '"variantes": ["Cambiar a materia civil",]'
+    )
+    raw_response = f"Intro\n```json\n{json_payload}\n```"
+
+    markdown, simulation_json, warnings = extract_simulation_payload(raw_response)
+
+    assert "Intro" in markdown
+    assert simulation_json is not None
+    assert warnings == []
+
+
+def test_extract_simulation_payload_strips_json_comments():
+    json_payload = _build_valid_json()
+    json_with_comment = json_payload[:-1] + "\n// comentario extra del modelo\n}"
+    raw_response = f"```json\n{json_with_comment}\n```"
+
+    markdown, simulation_json, warnings = extract_simulation_payload(raw_response)
+
+    assert markdown == ""
+    assert simulation_json is not None
+    assert warnings == [
+        "El modelo no devolvió contenido en Markdown. Se entrega solo el JSON estructurado disponible."
+    ]

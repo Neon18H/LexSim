@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from pydantic import ValidationError
 
@@ -15,6 +15,85 @@ JSON_BLOCK_PATTERN = re.compile(
     r"```json\s*(?P<json>[\s\S]*?)\s*```",
     re.IGNORECASE,
 )
+TRAILING_COMMA_PATTERN = re.compile(r",(?=\s*[}\]])")
+
+
+def _try_parse_json(
+    json_text: str, transformers: Optional[List[Callable[[str], str]]] = None
+) -> Tuple[Optional[SimulationJSON], Optional[Exception]]:
+    """Attempt to parse the JSON text using optional sanitizers."""
+
+    transformers = transformers or [lambda value: value]
+    last_error: Optional[Exception] = None
+    for transform in transformers:
+        candidate = transform(json_text)
+        try:
+            parsed = json.loads(candidate.strip())
+            return SimulationJSON.parse_obj(parsed), None
+        except (json.JSONDecodeError, ValidationError) as exc:
+            last_error = exc
+            continue
+    return None, last_error
+
+
+def _strip_json_comments(json_text: str) -> str:
+    """Strip C/C++ style comments that appear outside of strings."""
+
+    result: List[str] = []
+    length = len(json_text)
+    index = 0
+    in_string = False
+    escape = False
+
+    while index < length:
+        char = json_text[index]
+
+        if escape:
+            result.append(char)
+            escape = False
+            index += 1
+            continue
+
+        if char == "\\":
+            escape = True
+            result.append(char)
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            result.append(char)
+            index += 1
+            continue
+
+        if not in_string and char == "/" and index + 1 < length:
+            next_char = json_text[index + 1]
+            if next_char == "/":
+                index += 2
+                while index < length and json_text[index] not in {"\n", "\r"}:
+                    index += 1
+                continue
+            if next_char == "*":
+                index += 2
+                while index + 1 < length:
+                    if json_text[index] == "*" and json_text[index + 1] == "/":
+                        index += 2
+                        break
+                    index += 1
+                continue
+
+        result.append(char)
+        index += 1
+
+    return "".join(result)
+
+
+def _sanitize_json(json_text: str) -> str:
+    """Remove common issues introduced by LLMs in JSON payloads."""
+
+    without_comments = _strip_json_comments(json_text)
+    sanitized = re.sub(TRAILING_COMMA_PATTERN, "", without_comments)
+    return sanitized
 
 
 def _find_matching_brace(raw_text: str, start: int) -> Optional[int]:
@@ -84,14 +163,14 @@ def extract_simulation_payload(raw_text: str) -> Tuple[str, Optional[SimulationJ
     simulation_data: Optional[SimulationJSON] = None
 
     if json_block:
-        try:
-            parsed = json.loads(json_block.strip())
-            simulation_data = SimulationJSON.parse_obj(parsed)
-        except (json.JSONDecodeError, ValidationError) as exc:
+        transformers = [lambda value: value, _sanitize_json]
+        simulation_data, last_error = _try_parse_json(json_block, transformers)
+
+        if simulation_data is None and last_error is not None:
             warnings.append(
                 "No se pudo validar el bloque JSON generado. Se entrega solo el Markdown."
             )
-            LOGGER.warning("JSON extraction failed: %s", exc)
+            LOGGER.warning("JSON extraction failed after sanitization: %s", last_error)
     else:
         warnings.append(
             "No se detectó un bloque JSON válido en la respuesta del modelo."

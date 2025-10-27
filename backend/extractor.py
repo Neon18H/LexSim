@@ -1,30 +1,59 @@
-"""Utility helpers to prepare requests for the simulation service."""
+"""Utilities to extract structured JSON blocks from model responses."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+import json
+import logging
+import re
+from typing import List, Optional, Tuple
 
-from pydantic import BaseModel
+from pydantic import ValidationError
 
+from .schemas import SimulationJSON
 
-@dataclass(slots=True)
-class SimulationInput:
-    """Internal representation of the simulation payload."""
-
-    prompt: str
-    options: Dict[str, Any] = field(default_factory=dict)
-
-
-def _coerce_parameters(parameters: Optional[BaseModel]) -> Dict[str, Any]:
-    """Convert a Pydantic model into a serialisable dictionary."""
-
-    if parameters is None:
-        return {}
-    data = parameters.dict(exclude_none=True)
-    return {key: value for key, value in data.items() if value is not None}
+LOGGER = logging.getLogger(__name__)
+JSON_BLOCK_PATTERN = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 
 
-def build_simulation_input(prompt: str, parameters: Optional[BaseModel]) -> SimulationInput:
-    """Create an internal simulation input structure."""
+def _find_json_block(raw_text: str) -> Optional[str]:
+    match = JSON_BLOCK_PATTERN.search(raw_text)
+    if match:
+        return match.group(1)
+    start = raw_text.find("{")
+    end = raw_text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return raw_text[start : end + 1]
+    return None
 
-    return SimulationInput(prompt=prompt.strip(), options=_coerce_parameters(parameters))
+
+def extract_simulation_payload(raw_text: str) -> Tuple[str, Optional[SimulationJSON], List[str]]:
+    """Split the model response into markdown and structured JSON."""
+
+    warnings: List[str] = []
+    json_block = _find_json_block(raw_text)
+    simulation_data: Optional[SimulationJSON] = None
+
+    if json_block:
+        try:
+            parsed = json.loads(json_block)
+            simulation_data = SimulationJSON.parse_obj(parsed)
+        except (json.JSONDecodeError, ValidationError) as exc:
+            warnings.append(
+                "No se pudo validar el bloque JSON generado. Se entrega solo el Markdown."
+            )
+            LOGGER.warning("JSON extraction failed: %s", exc)
+    else:
+        warnings.append(
+            "No se detectó un bloque JSON válido en la respuesta del modelo."
+        )
+
+    if json_block:
+        markdown_part = raw_text.replace(json_block, "")
+        markdown_part = JSON_BLOCK_PATTERN.sub("", markdown_part)
+    else:
+        markdown_part = raw_text
+
+    cleaned_markdown = markdown_part.strip()
+    return cleaned_markdown, simulation_data, warnings
+
+
+__all__ = ["extract_simulation_payload"]

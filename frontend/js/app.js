@@ -1,135 +1,134 @@
 const form = document.getElementById('simulation-form');
-const stepsPane = document.getElementById('steps-pane');
-const summaryPane = document.getElementById('summary-pane');
-const metadataPane = document.getElementById('metadata-pane');
-const downloadButton = document.getElementById('download-result');
-let lastResult = null;
+const markdownOutput = document.getElementById('markdown-output');
+const jsonOutput = document.getElementById('json-output');
+const downloadMd = document.getElementById('download-md');
+const downloadJson = document.getElementById('download-json');
+const loadingSpinner = document.getElementById('loading');
+const loadingText = document.getElementById('loading-text');
+const submitBtn = document.getElementById('submit-btn');
+const alertsContainer = document.getElementById('alerts');
 
-const resolveApiBase = () => {
-  const { protocol, hostname, port } = window.location;
-  if (port === '8080') {
-    return `${protocol}//${hostname}:8000`;
+let latestMarkdown = '';
+let latestJson = null;
+
+function showLoading(isLoading) {
+  if (isLoading) {
+    loadingSpinner.classList.remove('d-none');
+    loadingText.classList.remove('visually-hidden');
+    submitBtn.disabled = true;
+  } else {
+    loadingSpinner.classList.add('d-none');
+    loadingText.classList.add('visually-hidden');
+    submitBtn.disabled = false;
   }
-  if (protocol.startsWith('http')) {
-    return `${protocol}//${hostname}:8000`;
-  }
-  return 'http://localhost:8000';
-};
+}
 
-const API_BASE = resolveApiBase();
+function resetResults() {
+  latestMarkdown = '';
+  latestJson = null;
+  markdownOutput.textContent = 'Aún no hay resultados.';
+  jsonOutput.textContent = 'Aún no hay resultados.';
+  downloadMd.disabled = true;
+  downloadJson.disabled = true;
+  alertsContainer.innerHTML = '';
+}
 
-const renderList = (container, items) => {
-  if (!items || items.length === 0) {
-    container.innerHTML = '<p class="text-muted">No hay datos disponibles.</p>';
+function buildPayload(formData) {
+  const restriccionesRaw = formData.get('restricciones') || '';
+  const restricciones = restriccionesRaw
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  return {
+    contexto: formData.get('contexto') || '',
+    materia: formData.get('materia') || 'penal',
+    nivel: formData.get('nivel') || 'intermedio',
+    jurisdiccion: formData.get('jurisdiccion') || undefined,
+    objetivo_didactico: formData.get('objetivo_didactico') || 'practicar objeciones y contrainterrogatorio',
+    duracion_min: Number(formData.get('duracion_min')) || 90,
+    restricciones: restricciones.length ? restricciones : undefined,
+  };
+}
+
+function renderWarnings(warnings) {
+  alertsContainer.innerHTML = '';
+  if (!warnings || warnings.length === 0) {
     return;
   }
-
-  const list = document.createElement('ul');
-  list.className = 'list-unstyled';
-  items.forEach((item) => {
-    const li = document.createElement('li');
-    li.textContent = item;
-    list.appendChild(li);
-  });
-  container.replaceChildren(list);
-};
-
-const renderMetadata = (container, metadata) => {
-  if (!metadata || Object.keys(metadata).length === 0) {
-    container.innerHTML = '<p class="text-muted">Sin metadatos.</p>';
-    return;
-  }
-
-  const list = document.createElement('dl');
-  list.className = 'row';
-  Object.entries(metadata).forEach(([key, value]) => {
-    const term = document.createElement('dt');
-    term.className = 'col-sm-4 text-capitalize';
-    term.textContent = key.replace(/_/g, ' ');
-    const detail = document.createElement('dd');
-    detail.className = 'col-sm-8';
-    detail.textContent = value;
-    list.appendChild(term);
-    list.appendChild(detail);
-  });
-  container.replaceChildren(list);
-};
-
-const resetResults = () => {
-  stepsPane.innerHTML = '<p class="text-muted">Aún no hay simulaciones.</p>';
-  summaryPane.innerHTML = '';
-  metadataPane.innerHTML = '';
-  downloadButton.disabled = true;
-  lastResult = null;
-};
-
-const showError = (message) => {
   const alert = document.createElement('div');
-  alert.className = 'alert alert-danger';
-  alert.textContent = message;
-  stepsPane.replaceChildren(alert);
-  summaryPane.innerHTML = '';
-  metadataPane.innerHTML = '';
-  downloadButton.disabled = true;
-};
+  alert.className = 'alert alert-warning';
+  alert.setAttribute('role', 'alert');
+  alert.innerHTML = warnings.map(warning => `<div>${warning}</div>`).join('');
+  alertsContainer.appendChild(alert);
+}
 
-form.addEventListener('submit', async (event) => {
+function enableDownloads() {
+  downloadMd.disabled = !latestMarkdown;
+  downloadJson.disabled = latestJson === null;
+}
+
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+downloadMd.addEventListener('click', () => {
+  if (!latestMarkdown) return;
+  downloadFile('lexsim_simulacion.md', latestMarkdown, 'text/markdown;charset=utf-8');
+});
+
+downloadJson.addEventListener('click', () => {
+  if (!latestJson) return;
+  downloadFile('lexsim_simulacion.json', JSON.stringify(latestJson, null, 2), 'application/json;charset=utf-8');
+});
+
+form.addEventListener('submit', async event => {
   event.preventDefault();
-  const prompt = document.getElementById('prompt').value.trim();
-  const temperatureValue = document.getElementById('temperature').value;
-  const maxStepsValue = document.getElementById('max-steps').value;
-
-  if (!prompt) {
-    showError('El prompt no puede estar vacío.');
+  const formData = new FormData(form);
+  if (!formData.get('contexto') || formData.get('contexto').trim().length === 0) {
+    markdownOutput.textContent = 'Por favor, ingresa un contexto válido.';
     return;
   }
 
-  const payload = { prompt };
-  const parameters = {};
-  if (temperatureValue !== '') parameters.temperature = Number(temperatureValue);
-  if (maxStepsValue !== '') parameters.max_steps = Number(maxStepsValue);
-  if (Object.keys(parameters).length > 0) {
-    payload.parameters = parameters;
-  }
-
-  stepsPane.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
-  summaryPane.innerHTML = '';
-  metadataPane.innerHTML = '';
+  showLoading(true);
+  resetResults();
 
   try {
-    const response = await fetch(`${API_BASE}/api/simulate`, {
+    const payload = buildPayload(formData);
+    const response = await fetch('http://localhost:8000/api/simulate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      throw new Error('No se pudo completar la simulación.');
+      const errorText = await response.text();
+      throw new Error(errorText || 'Error inesperado del servidor');
     }
 
-    const result = await response.json();
-    lastResult = result;
-    renderList(stepsPane, result.steps);
-    summaryPane.textContent = result.summary;
-    renderMetadata(metadataPane, result.metadata);
-    downloadButton.disabled = false;
+    const data = await response.json();
+    latestMarkdown = data.markdown || '';
+    latestJson = data.json || null;
+
+    markdownOutput.textContent = latestMarkdown || 'El modelo no devolvió contenido en Markdown.';
+    jsonOutput.textContent = latestJson
+      ? JSON.stringify(latestJson, null, 2)
+      : 'No se recibió un bloque JSON válido.';
+
+    renderWarnings(data.warnings);
+    enableDownloads();
   } catch (error) {
-    console.error(error);
-    showError(error.message || 'Error inesperado.');
+    markdownOutput.textContent = 'Ocurrió un error al generar la simulación.';
+    jsonOutput.textContent = String(error.message || error);
+  } finally {
+    showLoading(false);
   }
 });
-
-downloadButton.addEventListener('click', () => {
-  if (!lastResult) return;
-  const blob = new Blob([JSON.stringify(lastResult, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'lexsim-result.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-});
-
-resetResults();

@@ -129,3 +129,120 @@ def test_extract_simulation_payload_without_markdown():
     assert markdown == ""
     assert simulation_json is not None
     assert any("Markdown" in warning for warning in warnings)
+
+
+def test_extract_simulation_payload_nested_braces():
+    nested_json = json.dumps(
+        {
+            "meta": {
+                "titulo": "x",
+                "jurisdiccion": "y",
+                "materia": "penal",
+                "nivel": "basico",
+                "objetivo_didactico": "z",
+                "duracion_minutos": 60,
+            },
+            "personajes": [
+                {
+                    "nombre": "Test",
+                    "rol": "juez",
+                    "bio": "Bio",
+                    "objetivos": ["Objetivo"],
+                    "sesgos": ["Sesgo"],
+                }
+            ],
+            "cronologia": [{"t": "2030-01-01 09:00", "evento": "Inicio"}],
+            "planteamiento_juridico": {
+                "tipo": "penal",
+                "cargos_o_pretensiones": ["Cargo"],
+                "estandar_probatorio": "Estandar",
+                "notas": "Notas",
+            },
+            "pruebas": {
+                "documental": [
+                    {
+                        "id": "DOC-1",
+                        "descripcion": "Desc",
+                        "origen": "Origen",
+                        "autenticidad_custodia": "Cadena",
+                        "posibles_objeciones": ["Objecion"],
+                    }
+                ],
+                "testimonial": [
+                    {
+                        "id": "TES-1",
+                        "testigo": "Testigo",
+                        "alcance": "Alcance",
+                        "riesgos_credibilidad": ["Riesgo"],
+                        "contrapreguntas_sugeridas": ["Pregunta"],
+                    }
+                ],
+                "pericial": [
+                    {
+                        "id": "PER-1",
+                        "area": "Area",
+                        "metodo": "Metodo",
+                        "limites": "Limites",
+                        "validez": "Validez",
+                    }
+                ],
+                "digital_fisica": [
+                    {
+                        "id": "DIG-1",
+                        "tipo": "digital",
+                        "descripcion": "Descripcion",
+                        "hash": "abc123",
+                        "metadatos": {"duracion": "1m"},
+                        "cadena_custodia": "Cadena",
+                    }
+                ],
+            },
+            "guion": {
+                "instrucciones_iniciales_juez": "Inicio",
+                "apertura": {"parte_1": "Parte1", "parte_2": "Parte2"},
+                "interrogatorios": [
+                    {
+                        "tipo": "directo",
+                        "a_quien": "Testigo",
+                        "preguntas": ["¿Qué sucedió?"],
+                    }
+                ],
+                "objeciones_tipicas": [
+                    {"objecion": "leading", "fundamento": "Sugiere respuesta"}
+                ],
+                "cierre": {"parte_1": "Cierre1", "parte_2": "Cierre2"},
+                "instrucciones_finales_juez": "Final",
+            },
+            "decision": {
+                "criterios": ["Criterio"],
+                "matriz_veredicto": [
+                    {"criterio": "Criterio", "peso": 0.5, "observaciones": "Obs"}
+                ],
+                "resultados_alternativos": [
+                    {"escenario": "A", "descripcion": "Descripcion"}
+                ],
+            },
+            "banco_preguntas": ["Pregunta"],
+            "rubrica": [
+                {
+                    "criterio": "Dominio",
+                    "niveles": {
+                        "excelente": "Excelente",
+                        "bueno": "Bueno",
+                        "basico": "Basico",
+                    },
+                    "puntaje_max": 10,
+                }
+            ],
+            "variantes": ["Variante"],
+            "glosario": [{"termino": "Termino", "definicion": "Definicion"}],
+        }
+    )
+    raw_response = f"Contenido introductorio\n```json\n{nested_json}\n```\nConclusión"
+
+    markdown, simulation_json, warnings = extract_simulation_payload(raw_response)
+
+    assert "Contenido introductorio" in markdown
+    assert "Conclusión" in markdown
+    assert simulation_json is not None
+    assert not any("No se detectó un bloque JSON válido" in warning for warning in warnings)

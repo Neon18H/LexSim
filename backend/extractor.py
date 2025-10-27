@@ -12,8 +12,44 @@ from .schemas import SimulationJSON
 
 LOGGER = logging.getLogger(__name__)
 JSON_BLOCK_PATTERN = re.compile(
-    r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE
+    r"```json\s*(?P<json>[\s\S]*?)\s*```",
+    re.IGNORECASE,
 )
+
+
+def _find_matching_brace(raw_text: str, start: int) -> Optional[int]:
+    """Return the index of the matching closing brace for the given start."""
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for idx in range(start, len(raw_text)):
+        char = raw_text[idx]
+
+        if escape:
+            escape = False
+            continue
+
+        if char == "\\":
+            escape = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return idx
+
+    return None
 
 
 def _find_json_block(raw_text: str) -> Tuple[Optional[str], Optional[Tuple[int, int]]]:
@@ -21,12 +57,21 @@ def _find_json_block(raw_text: str) -> Tuple[Optional[str], Optional[Tuple[int, 
 
     match = JSON_BLOCK_PATTERN.search(raw_text)
     if match:
-        return match.group(1), match.span()
+        json_content = match.group("json")
+        return json_content, match.span()
 
     start = raw_text.find("{")
-    end = raw_text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        return raw_text[start : end + 1], (start, end + 1)
+    while start != -1:
+        end = _find_matching_brace(raw_text, start)
+        if end is None:
+            break
+        candidate = raw_text[start : end + 1]
+        try:
+            json.loads(candidate)
+            return candidate, (start, end + 1)
+        except json.JSONDecodeError:
+            start = raw_text.find("{", start + 1)
+            continue
 
     return None, None
 
@@ -40,7 +85,7 @@ def extract_simulation_payload(raw_text: str) -> Tuple[str, Optional[SimulationJ
 
     if json_block:
         try:
-            parsed = json.loads(json_block)
+            parsed = json.loads(json_block.strip())
             simulation_data = SimulationJSON.parse_obj(parsed)
         except (json.JSONDecodeError, ValidationError) as exc:
             warnings.append(
@@ -60,9 +105,14 @@ def extract_simulation_payload(raw_text: str) -> Tuple[str, Optional[SimulationJ
     cleaned_markdown = markdown_part.strip()
 
     if not cleaned_markdown:
-        warnings.append(
-            "El modelo no devolvió contenido en Markdown. Se entrega solo el JSON estructurado disponible."
-        )
+        if simulation_data is None:
+            warnings.append(
+                "El modelo no devolvió contenido en Markdown ni proporcionó un JSON estructurado válido."
+            )
+        else:
+            warnings.append(
+                "El modelo no devolvió contenido en Markdown. Se entrega solo el JSON estructurado disponible."
+            )
 
     return cleaned_markdown, simulation_data, warnings
 

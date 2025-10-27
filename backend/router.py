@@ -9,6 +9,7 @@ from typing import Deque, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .extractor import extract_simulation_payload
+from .fallbacks import build_fallback_markdown, build_fallback_simulation_json
 from .schemas import SimulateRequest, SimulateResponse
 from .service_llm import SYSTEM_PROMPT, build_user_prompt, call_openrouter
 from .settings import get_settings
@@ -59,6 +60,33 @@ async def simulate_endpoint(
         user_prompt = build_user_prompt(request_payload)
         raw_response = await call_openrouter(SYSTEM_PROMPT, user_prompt)
         markdown, json_data, warnings = extract_simulation_payload(raw_response)
+
+        fallback_messages = []
+
+        if not markdown.strip():
+            markdown = build_fallback_markdown(request_payload)
+            fallback_messages.append(
+                "Se generó contenido en Markdown de respaldo porque el modelo no lo proporcionó."
+            )
+
+        if json_data is None:
+            json_data = build_fallback_simulation_json(request_payload)
+            fallback_messages.append(
+                "Se generó un bloque JSON de respaldo porque el modelo no entregó uno válido."
+            )
+
+        if fallback_messages:
+            LOGGER.warning(
+                "La respuesta del modelo fue incompleta; se activaron salidas de respaldo."
+            )
+            warnings = [
+                message
+                for message in warnings
+                if "No se detectó un bloque JSON válido" not in message
+                and "El modelo no devolvió contenido en Markdown" not in message
+            ]
+            warnings.extend(fallback_messages)
+
         return SimulateResponse(
             markdown=markdown, simulation_json=json_data, warnings=warnings
         )

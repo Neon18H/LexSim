@@ -291,3 +291,26 @@ def test_simulate_warns_when_markdown_missing(monkeypatch):
     assert data["markdown"] == ""
     assert data["json"]["meta"]["titulo"] == "Caso solo estructurado"
     assert any("Markdown" in warning for warning in data["warnings"])
+
+
+def test_simulate_uses_fallback_when_model_empty(monkeypatch):
+    async def _empty_response(system_prompt: str, user_prompt: str) -> str:
+        return "   "
+
+    monkeypatch.setattr("backend.router.call_openrouter", _empty_response)
+
+    payload: Dict[str, Any] = {
+        "contexto": "Linea 1\nLinea 2\nLinea 3",
+        "materia": "penal",
+        "nivel": "intermedio",
+        "duracion_min": 120,
+        "objetivo_didactico": "analizar fallbacks",
+    }
+
+    response = client.post("/api/simulate", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["markdown"].startswith("# Simulación de respaldo LexSim")
+    assert data["json"]["meta"]["titulo"].startswith("Simulación de contingencia")
+    assert any("respaldo" in warning.lower() for warning in data["warnings"])

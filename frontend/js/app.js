@@ -23,6 +23,51 @@ function showLoading(isLoading) {
   }
 }
 
+function clearAlerts() {
+  alertsContainer.innerHTML = '';
+}
+
+function showError(message) {
+  clearAlerts();
+  if (!message) return;
+  const alert = document.createElement('div');
+  alert.className = 'alert alert-danger';
+  alert.setAttribute('role', 'alert');
+  alert.textContent = message;
+  alertsContainer.appendChild(alert);
+}
+
+function validateContext(value) {
+  const normalized = value.trim();
+  if (normalized.length < 10) {
+    return 'El contexto debe contener al menos 10 caracteres relevantes.';
+  }
+
+  const lines = normalized
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length > 10) {
+    return 'El contexto no debe exceder 10 líneas.';
+  }
+
+  if (lines.length >= 3) {
+    return null;
+  }
+
+  const sentences = normalized
+    .split(/[.!?]+/)
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length > 0);
+
+  if (sentences.length < 3) {
+    return 'El contexto debe contener al menos 3 oraciones o líneas informativas.';
+  }
+
+  return null;
+}
+
 function resetResults() {
   latestMarkdown = '';
   latestJson = null;
@@ -30,7 +75,7 @@ function resetResults() {
   jsonOutput.textContent = 'Aún no hay resultados.';
   downloadMd.disabled = true;
   downloadJson.disabled = true;
-  alertsContainer.innerHTML = '';
+  clearAlerts();
 }
 
 function buildPayload(formData) {
@@ -52,7 +97,7 @@ function buildPayload(formData) {
 }
 
 function renderWarnings(warnings) {
-  alertsContainer.innerHTML = '';
+  clearAlerts();
   if (!warnings || warnings.length === 0) {
     return;
   }
@@ -93,8 +138,10 @@ downloadJson.addEventListener('click', () => {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const formData = new FormData(form);
-  if (!formData.get('contexto') || formData.get('contexto').trim().length === 0) {
-    markdownOutput.textContent = 'Por favor, ingresa un contexto válido.';
+  const rawContext = formData.get('contexto') || '';
+  const contextError = validateContext(rawContext);
+  if (contextError) {
+    showError(contextError);
     return;
   }
 

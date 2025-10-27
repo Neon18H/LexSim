@@ -1,92 +1,88 @@
 # LexSim
 
-LexSim es una demostración minimalista de una aplicación full-stack que simula narrativas a partir de un prompt. El proyecto está dividido en un backend basado en FastAPI y un frontend estático elaborado con Bootstrap 5.
+LexSim es un agente pedagógico de simulación de juicios que genera un guion completo en Markdown y un bloque JSON estructurado a partir de un contexto breve. El proyecto se entrega como solución full-stack (FastAPI + frontend estático con Bootstrap) y está listo para ejecutarse localmente o con Docker Compose.
 
-## Estructura del proyecto
+## Arquitectura
+
+- **Backend (`backend/`)**: API FastAPI que expone los endpoints `GET /health` y `POST /api/simulate`. Integra modelos gratuitos de OpenRouter, realiza validación de JSON y aplica un rate limit simple.
+- **Frontend (`frontend/`)**: Página HTML5 responsiva desarrollada con Bootstrap 5 y JavaScript puro. Consume la API y permite descargar los resultados.
+- **Infraestructura**: Dockerfiles independientes y `docker-compose.yml` para levantar ambos servicios. Variables de entorno gestionadas con `.env`.
+
+## Requisitos previos
+
+- Python 3.11+
+- Node.js no es necesario (frontend estático)
+- Docker y Docker Compose (opcional)
+
+## Variables de entorno
+
+Copia `.env.example` a `.env` en la raíz del proyecto y completa los valores:
 
 ```
-backend/
-  Dockerfile
-  extractor.py
-  main.py
-  requirements.txt
-  service_llm.py
-  settings.py
-  tests/
-frontend/
-  Dockerfile
-  css/
-    styles.css
-  index.html
-  js/
-    app.js
-.env.example
-LICENSE
-docker-compose.yml
-README.md
+cp .env.example .env
 ```
 
-## Requisitos
+Variables principales:
 
-* Python 3.11+
-* NodeJS no es necesario (el frontend es estático)
-* Docker (opcional) para ejecutar los servicios en contenedores
+- `OPENROUTER_API_KEY`: clave personal de OpenRouter (no compartir).
+- `OPENROUTER_MODEL`: modelo gratuito principal. Valor por defecto `mistralai/mistral-7b-instruct:free`.
+- `OPENROUTER_FALLBACKS`: lista separada por comas con modelos de respaldo gratuitos.
+- `CORS_ORIGINS`: orígenes permitidos para el frontend (por defecto `http://localhost:8080`).
+- `RATE_LIMIT_PER_MINUTE`: número máximo de solicitudes por minuto e IP (30 por defecto).
 
-## Configuración del backend
+## Ejecución local (sin Docker)
 
-1. Cree un entorno virtual e instale las dependencias:
+1. Instala dependencias del backend:
 
    ```bash
+   cd backend
    python -m venv .venv
-   source .venv/bin/activate
-   pip install -r backend/requirements.txt
+   source .venv/bin/activate  # En Windows usa .venv\\Scripts\\activate
+   pip install -r requirements.txt
    ```
 
-2. Copie `.env.example` a `.env` y ajuste los valores según sea necesario.
-
-3. Inicie el servidor de desarrollo:
+2. Arranca el servidor FastAPI:
 
    ```bash
-   uvicorn backend.main:app --reload
+   uvicorn app:app --reload --host 0.0.0.0 --port 8000
    ```
 
-El backend expone los siguientes endpoints:
+3. Levanta el frontend con un servidor estático, por ejemplo:
 
-* `GET /health`: verificación de estado.
-* `POST /api/simulate`: recibe un JSON con el `prompt` y parámetros opcionales (`temperature`, `max_steps`). Devuelve los pasos generados y metadatos del proceso.
+   ```bash
+   cd ../frontend
+   python -m http.server 8080
+   ```
 
-## Pruebas
-
-Ejecute la suite de pruebas de FastAPI con:
-
-```bash
-pytest backend/tests
-```
-
-## Frontend
-
-Abra `frontend/index.html` en su navegador. La interfaz permite:
-
-* Introducir un prompt y parámetros opcionales.
-* Visualizar los resultados en pestañas.
-* Descargar un archivo JSON con la simulación.
-
-Para servir el frontend de forma local puede utilizar cualquier servidor estático, por ejemplo:
-
-```bash
-python -m http.server --directory frontend 8000
-```
+4. Abre `http://localhost:8080` en tu navegador. Ingresa el contexto del caso (3 a 10 líneas) y genera la simulación. El mensaje “Demo académica (no asesoría legal)” recuerda que el contenido es ficticio.
 
 ## Ejecución con Docker Compose
 
-1. Construya las imágenes y levante los servicios:
+1. Copia `.env.example` a `.env` y define tu `OPENROUTER_API_KEY`.
+2. Desde la raíz del proyecto ejecuta:
 
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 
-2. El backend estará disponible en `http://localhost:8000` y el frontend en `http://localhost:8080`.
+3. El backend quedará disponible en `http://localhost:8000` y el frontend en `http://localhost:8080`.
+
+## Pruebas automatizadas
+
+El backend cuenta con pruebas mínimas usando `pytest`.
+
+```bash
+cd backend
+pytest
+```
+
+## Seguridad y buenas prácticas
+
+- La clave de OpenRouter se mantiene en el backend y nunca se expone en el frontend.
+- Se aplica un rate limit en memoria (30 solicitudes por minuto por IP) para `/api/simulate`.
+- El frontend presenta el Markdown como texto preformateado sin ejecutar HTML para evitar inyecciones.
+- Todos los nombres y lugares generados son ficticios.
 
 ## Licencia
 
-Este proyecto se distribuye bajo los términos de la licencia MIT, disponible en `LICENSE`.
+Este proyecto se distribuye bajo la licencia MIT. Consulta el archivo `LICENSE` para más detalles.

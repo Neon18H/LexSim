@@ -1,15 +1,36 @@
 body {
-  background-color: #f6f8fb;
+  background-color: #f6f7fb;
+  color: #1f2933;
 }
 
 .navbar-brand {
-  font-weight: 600;
+  font-size: 1.25rem;
 }
 
-#result-content .tab-pane {
-  min-height: 120px;
+.card {
+  border: none;
+  border-radius: 0.75rem;
 }
 
-#result-content ul {
-  padding-left: 1.25rem;
+.result-box {
+  min-height: 240px;
+  background-color: #0b1728;
+  color: #f3f4f6;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow: auto;
+  font-family: "Fira Code", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+.btn:disabled {
+  pointer-events: none;
+}
+
+footer a {
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
 }

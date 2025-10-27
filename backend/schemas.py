@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Literal, Optional
 
+import re
+
 from pydantic import BaseModel, Field, validator
 
 
@@ -30,11 +32,26 @@ class SimulateRequest(BaseModel):
 
     @validator("contexto")
     def validate_context(cls, value: str) -> str:  # type: ignore[override]
-        lines = [line for line in value.strip().splitlines() if line.strip()]
-        if len(lines) < 3:
-            raise ValueError("El contexto debe contener al menos 3 líneas.")
+        """Ensure the context has enough meaningful information without being excessive."""
+
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("El contexto debe contener al menos 10 caracteres relevantes.")
+
+        # Allow users to provide either multiple lines or multiple sentences.
+        lines = [line for line in normalized.splitlines() if line.strip()]
         if len(lines) > 10:
             raise ValueError("El contexto no debe exceder 10 líneas.")
+
+        if len(lines) >= 3:
+            return value
+
+        sentences = [s for s in re.split(r"[.!?]+", normalized) if s.strip()]
+        if len(sentences) < 3:
+            raise ValueError(
+                "El contexto debe contener al menos 3 oraciones o líneas informativas."
+            )
+
         return value
 
 

@@ -41,6 +41,21 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
 
+        @classmethod
+        def parse_env_var(cls, field_name, raw_value):
+            """Handle comma separated lists without requiring JSON."""
+
+            if field_name in {"openrouter_fallbacks", "cors_origins"}:
+                if isinstance(raw_value, str):
+                    if not raw_value.strip():
+                        return []
+                    return [
+                        item.strip()
+                        for item in raw_value.split(",")
+                        if item.strip()
+                    ]
+            return super().parse_env_var(field_name, raw_value)
+
     @validator("openrouter_fallbacks", pre=True)
     def split_fallbacks(cls, value):  # type: ignore[override]
         """Allow comma separated fallbacks from environment variables."""

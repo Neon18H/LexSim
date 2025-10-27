@@ -59,7 +59,9 @@ async def simulate_endpoint(
         user_prompt = build_user_prompt(request_payload)
         raw_response = await call_openrouter(SYSTEM_PROMPT, user_prompt)
         markdown, json_data, warnings = extract_simulation_payload(raw_response)
-        return SimulateResponse(markdown=markdown, json=json_data, warnings=warnings)
+        return SimulateResponse(
+            markdown=markdown, simulation_json=json_data, warnings=warnings
+        )
     except HTTPException:
         raise
     except Exception as exc:  # pragma: no cover - unexpected errors

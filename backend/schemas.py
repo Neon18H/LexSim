@@ -193,8 +193,14 @@ class SimulateResponse(BaseModel):
     """Response payload for simulation generation."""
 
     markdown: str
-    json: Optional[SimulationJSON]
+    simulation_json: Optional[SimulationJSON] = Field(
+        default=None, alias="json", description="Estructura detallada en formato JSON"
+    )
     warnings: List[str] = Field(default_factory=list)
+
+    class Config:
+        allow_population_by_field_name = True
+        allow_population_by_alias = True
 
 
 __all__ = [

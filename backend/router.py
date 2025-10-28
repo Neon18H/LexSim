@@ -62,18 +62,26 @@ async def simulate_endpoint(
         markdown, json_data, warnings = extract_simulation_payload(raw_response)
 
         fallback_messages = []
+        markdown_missing = not markdown.strip()
+        json_missing = json_data is None
 
-        if not markdown.strip():
+        if markdown_missing and json_missing:
             markdown = build_fallback_markdown(request_payload)
-            fallback_messages.append(
-                "Se generó contenido en Markdown de respaldo porque el modelo no lo proporcionó."
+            json_data = build_fallback_simulation_json(request_payload)
+            fallback_messages.extend(
+                [
+                    "Se generó contenido en Markdown de respaldo porque el modelo no lo proporcionó.",
+                    "Se generó un bloque JSON de respaldo porque el modelo no entregó uno válido.",
+                ]
             )
-
-        if json_data is None:
+        elif json_missing:
             json_data = build_fallback_simulation_json(request_payload)
             fallback_messages.append(
                 "Se generó un bloque JSON de respaldo porque el modelo no entregó uno válido."
             )
+        elif markdown_missing:
+            # Conserve the empty markdown so the client can decide how to handle it.
+            markdown = ""
 
         if fallback_messages:
             LOGGER.warning(

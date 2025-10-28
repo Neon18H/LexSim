@@ -274,3 +274,122 @@ def test_extract_simulation_payload_strips_json_comments():
     assert warnings == [
         "El modelo no devolvió contenido en Markdown. Se entrega solo el JSON estructurado disponible."
     ]
+
+
+def test_extract_simulation_payload_coerces_python_literals():
+    relaxed_json = """
+    {
+        'meta': {
+            'titulo': 'Caso no estandar',
+            'jurisdiccion': 'Penal genérica',
+            'materia': 'penal',
+            'nivel': 'intermedio',
+            'objetivo_didactico': 'validar coercción',
+            'duracion_minutos': 90,
+        },
+        'personajes': [
+            {
+                'nombre': 'Juez de pruebas',
+                'rol': 'juez',
+                'bio': 'Figura académica',
+                'objetivos': ['Guiar audiencia'],
+                'sesgos': ['Preferencia por formatos'],
+            }
+        ],
+        'cronologia': [{'t': '2035-01-01 09:00', 'evento': 'Inicio de audiencia'}],
+        'planteamiento_juridico': {
+            'tipo': 'penal',
+            'cargos_o_pretensiones': ['Incumplimiento'],
+            'estandar_probatorio': 'Más allá de duda razonable',
+            'notas': 'Generado sin formato estricto',
+        },
+        'pruebas': {
+            'documental': [
+                {
+                    'id': 'DOC-01',
+                    'descripcion': 'Documento base',
+                    'origen': 'Archivo académico',
+                    'autenticidad_custodia': 'Sello simulado',
+                    'posibles_objeciones': ['Pertinencia'],
+                }
+            ],
+            'testimonial': [
+                {
+                    'id': 'TES-01',
+                    'testigo': 'Persona Observadora',
+                    'alcance': 'Presenció hechos',
+                    'riesgos_credibilidad': ['Sesgo de confirmación'],
+                    'contrapreguntas_sugeridas': ['Detallar iluminación'],
+                }
+            ],
+            'pericial': [
+                {
+                    'id': 'PER-01',
+                    'area': 'Tecnología',
+                    'metodo': 'Análisis pericial',
+                    'limites': 'Datos hipotéticos',
+                    'validez': 'Procedimiento docente',
+                }
+            ],
+            'digital_fisica': [
+                {
+                    'id': 'DIG-01',
+                    'tipo': 'digital',
+                    'descripcion': 'Video de respaldo',
+                    'hash': 'abc123',
+                    'metadatos': {'duracion': '00:01:00', 'activo': true},
+                    'cadena_custodia': 'Transferencia controlada',
+                }
+            ],
+        },
+        'guion': {
+            'instrucciones_iniciales_juez': 'Saludo y explicación',
+            'apertura': {'parte_1': 'Narrativa actora', 'parte_2': 'Narrativa defensa'},
+            'interrogatorios': [
+                {
+                    'tipo': 'directo',
+                    'a_quien': 'TES-01',
+                    'preguntas': ['¿Qué observó primero?'],
+                }
+            ],
+            'objeciones_tipicas': [
+                {'objecion': 'leading', 'fundamento': 'Sugiere respuesta'},
+            ],
+            'cierre': {'parte_1': 'Resumen actora', 'parte_2': 'Resumen defensa'},
+            'instrucciones_finales_juez': 'Reflexión final',
+        },
+        'decision': {
+            'criterios': ['Calidad de evidencia'],
+            'matriz_veredicto': [
+                {'criterio': 'Credibilidad', 'peso': 0.5, 'observaciones': 'Consistente'},
+            ],
+            'resultados_alternativos': [
+                {'escenario': 'A', 'descripcion': 'Resultado alterno'},
+            ],
+        },
+        'banco_preguntas': ['¿Qué objeción corresponde?'],
+        'rubrica': [
+            {
+                'criterio': 'Dominio procesal',
+                'niveles': {
+                    'excelente': 'Domina objeciones complejas',
+                    'bueno': 'Reconoce objeciones comunes',
+                    'basico': 'Requiere guía',
+                },
+                'puntaje_max': 10,
+            }
+        ],
+        'variantes': ['Cambiar a materia civil'],
+        'glosario': [
+            {'termino': 'Cadena de custodia', 'definicion': 'Registro de evidencia'},
+        ],
+    }
+    """
+
+    raw_response = f"Salida libre\n```json\n{relaxed_json}\n```"
+
+    markdown, simulation_json, warnings = extract_simulation_payload(raw_response)
+
+    assert "Salida libre" in markdown
+    assert simulation_json is not None
+    assert warnings == []

@@ -1,10 +1,11 @@
 """Utilities to extract structured JSON blocks from model responses."""
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import re
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from pydantic import ValidationError
 
@@ -16,6 +17,59 @@ JSON_BLOCK_PATTERN = re.compile(
     re.IGNORECASE,
 )
 TRAILING_COMMA_PATTERN = re.compile(r",(?=\s*[}\]])")
+
+
+def _replace_unquoted_literals(text: str, replacements: Dict[str, str]) -> str:
+    """Replace bare JSON literals (true/false/null) while respecting quoted strings."""
+
+    result: List[str] = []
+    length = len(text)
+    index = 0
+    in_string = False
+    escape = False
+    string_delimiter = ""
+
+    while index < length:
+        char = text[index]
+
+        if in_string:
+            result.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == string_delimiter:
+                in_string = False
+                string_delimiter = ""
+            index += 1
+            continue
+
+        if char in {'"', "'"}:
+            in_string = True
+            string_delimiter = char
+            result.append(char)
+            index += 1
+            continue
+
+        replaced = False
+        for literal, replacement in replacements.items():
+            end = index + len(literal)
+            if text.startswith(literal, index):
+                prev = text[index - 1] if index > 0 else ""
+                nxt = text[end] if end < length else ""
+                if not (prev.isalnum() or prev == "_") and not (nxt.isalnum() or nxt == "_"):
+                    result.append(replacement)
+                    index = end
+                    replaced = True
+                    break
+
+        if replaced:
+            continue
+
+        result.append(char)
+        index += 1
+
+    return "".join(result)
 
 
 def _try_parse_json(
@@ -96,6 +150,23 @@ def _sanitize_json(json_text: str) -> str:
     return sanitized
 
 
+def _coerce_python_literals(json_text: str) -> str:
+    """Convert relaxed JSON representations into strict JSON."""
+
+    sanitized = _sanitize_json(json_text)
+    converted = _replace_unquoted_literals(
+        sanitized, {"true": "True", "false": "False", "null": "None"}
+    )
+    try:
+        python_obj = ast.literal_eval(converted)
+    except (ValueError, SyntaxError):
+        return json_text
+    try:
+        return json.dumps(python_obj)
+    except (TypeError, ValueError):
+        return json_text
+
+
 def _find_matching_brace(raw_text: str, start: int) -> Optional[int]:
     """Return the index of the matching closing brace for the given start."""
 
@@ -163,7 +234,7 @@ def extract_simulation_payload(raw_text: str) -> Tuple[str, Optional[SimulationJ
     simulation_data: Optional[SimulationJSON] = None
 
     if json_block:
-        transformers = [lambda value: value, _sanitize_json]
+        transformers = [lambda value: value, _sanitize_json, _coerce_python_literals]
         simulation_data, last_error = _try_parse_json(json_block, transformers)
 
         if simulation_data is None and last_error is not None:
